@@ -1,0 +1,109 @@
+stages:
+  - install
+  - quality
+  - test
+  - build
+  - security
+
+variables:
+  NODE_ENV: "test" # Sets the environment for Node.js applications
+  CI: "true" # Indicates we're running in CI environment
+  NPM_CONFIG_LOGLEVEL: "error" # Reduces npm output verbosity
+  NPM_CONFIG_AUDIT: "false" # Disables npm audit during CI (we use GitLab's security scanning)
+
+  SECRET_DETECTION_ENABLED: "true"
+  SECRET_DETECTION_EXCLUDED_PATHS: "dist, node_modules, coverage, .git, spec, test, tests, tmp, temp, build, out"
+  SAST_EXCLUDED_PATHS: "dist, node_modules, coverage, .git, spec, test, tests, tmp, temp, build, out"
+
+  SAST_STAGE: "test"
+  SECRET_DETECTION_STAGE: "security"
+  DEPENDENCY_SCANNING_STAGE: "security"
+
+install-dependencies:
+  stage: install
+  image: node:20-alpine
+  timeout: 3 minutes
+  script:
+    - npm ci
+  cache:
+    key: "node-modules-$CI_COMMIT_REF_SLUG"
+    paths:
+      - node_modules/
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH
+
+lint-code:
+  stage: quality
+  image: node:20-alpine
+  timeout: 2 minutes
+  dependencies:
+    - install-dependencies
+  cache:
+    key: "node-modules-$CI_COMMIT_REF_SLUG"
+    paths:
+      - node_modules/
+  script:
+    - npm run lint
+  allow_failure: false
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH
+
+run-tests:
+  stage: quality
+  image: node:20-alpine
+  timeout: 15 minutes
+  dependencies:
+    - install-dependencies
+  cache:
+    key: "node-modules-$CI_COMMIT_REF_SLUG"
+    paths:
+      - node_modules/
+  script:
+    - npm test
+  artifacts:
+    paths:
+      - coverage/
+    expire_in: 1 week
+  coverage: '/All files[^|]*\|[^|]*\|[^|]*\|[^|]*\s+(\d+)/'
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH
+
+build-application:
+  stage: build
+  image: node:20-alpine
+  timeout: 3 minutes
+  dependencies:
+    - install-dependencies
+  cache:
+    key: "node-modules-$CI_COMMIT_REF_SLUG"
+    paths:
+      - node_modules/
+  script:
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
