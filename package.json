@@ -87,7 +87,7 @@
     "react-dom": "19.2.0",
     "reflect-metadata": "^0.2.2",
     "sweetalert2": "^11.26.3",
-    "typeorm": "^0.3.27",
+    "typeorm": "^0.3.28",
     "jsonwebtoken": "^9.0.2",
     "next": "16.0.1",
     "pg": "^8.16.3",
